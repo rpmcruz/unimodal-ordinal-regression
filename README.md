@@ -1,2 +1,5 @@
-# unimodal-ordinal-regression
-Two methods proposed for ordinal regression that take advantage of unimodal distributions.
+# Unimodal Distributions for Ordinal Regression
+
+Code for Paper by Jaime S. Cardoso, Ricardo Cruz, and Tomé Albuquerque.
+
+**Abstract:** In many real-world prediction tasks, class labels contain information about the relative order between labels that are not captured by commonly used loss functions such as multicategory cross-entropy. Recently, the preference for unimodal distributions in the output space has been incorporated into models and loss functions to account for such ordering information. However, current approaches rely on heuristics that lack a theoretical foundation. Here, we propose two new approaches to incorporate the preference for unimodal distributions into the predictive model. We analyse the set of unimodal distributions in the probability simplex and establish fundamental properties. We then propose a new architecture that imposes unimodal distributions and a new loss term that relies on the notion of projection in a set to promote unimodality. Experiments show the new architecture achieves top-2 performance, while the proposed new loss term is very competitive while maintaining high unimodality.
