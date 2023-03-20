@@ -200,17 +200,13 @@ class BinomialUnimodal_CE(OrdinalLoss):
         return 1
 
     def forward(self, ypred, ytrue):
-        return F.nll_loss(self.to_log_proba(ypred), ytrue, reduction='none')
+        log_probs = self.to_log_proba(ypred)
+        return F.nll_loss(log_probs, ytrue, reduction='none')
 
     def to_proba(self, ypred):
-        device = ypred.device
-        probs = torch.sigmoid(ypred)
-        N = ypred.shape[0]
-        K = torch.tensor(self.K, dtype=torch.float, device=device)
-        kk = torch.ones((N, self.K), device=device) * torch.arange(self.K, dtype=torch.float, device=device)[None]
-        num = fact(K-1) * (probs**kk) * (1-probs)**(K-kk-1)
-        den = fact(kk) * fact(K-kk-1)
-        return num / den
+        # it is numerically better to operate in the log-space due to precision
+        # overflows introduced by the factorial.
+        return torch.exp(self.to_log_proba(ypred))
 
     def to_log_proba(self, ypred):
         # used internally by the loss in forward()
@@ -278,7 +274,7 @@ def neighbor_term(ypred, ytrue, margin):
     K = P.shape[1]
     dP = torch.diff(P, 1)
     sign = (torch.arange(K-1, device=ytrue.device)[None] >= ytrue[:, None])*2-1
-    return torch.sum(approx_relu(margin + sign*dP, 1))
+    return torch.sum(relu(margin + sign*dP), 1)
 
 class CO2(OrdinalLoss):
     def __init__(self, K, lamda=0.01, omega=0.05):
@@ -310,7 +306,6 @@ class HO2(OrdinalLoss):
 
     def to_proba(self, ypred):
         return F.softmax(ypred, 1)
-
 
 ################################################################################
 # PROPOSED LOSSES.                                                             #
