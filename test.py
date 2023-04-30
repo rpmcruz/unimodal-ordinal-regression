@@ -8,6 +8,7 @@ parser.add_argument('--datadir', default='/data')
 parser.add_argument('--lamda', type=float)
 parser.add_argument('--reps', nargs='+', type=int)
 parser.add_argument('--print-lambda', action='store_true')
+parser.add_argument('--only-metric', type=int)
 args = parser.parse_args()
 
 from torch.utils.data import DataLoader
@@ -21,7 +22,7 @@ device = 'cuda' if torch.cuda.is_available() else 'cpu'
 
 transform = transforms.Compose([
     transforms.ConvertImageDtype(torch.float32),
-    transforms.Resize((256, 256)),
+    transforms.Resize((256, 256), antialias=True),
     transforms.Normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225]),
 ])
 
@@ -62,7 +63,9 @@ def compute_metrics(rep, metrics_list):
             Yhat = model(X)
         YY_pred.append(Yhat)
         YY_true.append(Y)
-    PP_pred, YY_pred = loss_fn.to_proba_and_classes(torch.cat(YY_pred))
+    YY_pred = torch.cat(YY_pred)
+    PP_pred = loss_fn.to_proba(YY_pred)
+    YY_pred = loss_fn.to_classes(YY_pred)
     YY_true = torch.cat(YY_true)
     return torch.tensor([metric(PP_pred, YY_pred, YY_true) for metric in metrics_list], device=device)
 
@@ -73,11 +76,15 @@ metrics_list = [
 ]
 precisions = [2, 3, 2]
 
+if args.only_metric is not None:
+    metrics_list = [metrics_list[args.only_metric]]
+    precisions = [precisions[args.only_metric]]
+
 results = torch.stack([compute_metrics(rep, metrics_list) for rep in args.reps])
-print(args.loss.replace('_', r'\_'), end='')
+#print(args.loss.replace('_', r'\_'), end='')
 if args.print_lambda:
     print(f' & {args.lamda}', end='')
 if len(args.reps) == 1:
-    print(' & ' + ' & '.join([f'{result:.{precision}f}' for precision, result in zip(precisions, results[0])]) + r' \\')
+    print(' & ' + ' & '.join([f'{result:.{precision}f}' for precision, result in zip(precisions, results[0])]), end='') # + r' \\')
 else:
-    print(' & ' + ' & '.join([f'${mean:.{precision}f}\color{{gray}}\pm{std:.{precision}f}$' for precision, mean, std in zip(precisions, results.mean(0), results.std(0))]) + r' \\')
+    print(' & ' + ' & '.join([f'${mean:.{precision}f}\color{{gray}}\pm{std:.{precision}f}$' for precision, mean, std in zip(precisions, results.mean(0), results.std(0))]), end='') # + r' \\')

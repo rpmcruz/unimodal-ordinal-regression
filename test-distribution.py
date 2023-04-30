@@ -21,7 +21,7 @@ device = 'cuda' if torch.cuda.is_available() else 'cpu'
 
 transform = transforms.Compose([
     transforms.ConvertImageDtype(torch.float32),
-    transforms.Resize((256, 256)),
+    transforms.Resize((256, 256), antialias=True),
     transforms.Normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225]),
 ])
 

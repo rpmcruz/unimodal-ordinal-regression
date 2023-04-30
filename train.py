@@ -23,7 +23,7 @@ device = 'cuda' if torch.cuda.is_available() else 'cpu'
 
 transform = transforms.Compose([
     transforms.ConvertImageDtype(torch.float32),
-    transforms.Resize((int(256*1.05), int(256*1.05))),
+    transforms.Resize((int(256*1.05), int(256*1.05)), antialias=True),
     transforms.RandomCrop((256, 256)),
     transforms.ColorJitter(0.1, 0.1),
     transforms.RandomHorizontalFlip(),

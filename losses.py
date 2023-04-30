@@ -29,6 +29,7 @@ def to_classes(probs, method=None):
 # we are using softplus instead of relu since it is smoother to optimize.
 # as in http://proceedings.mlr.press/v70/beckham17a/beckham17a.pdf
 approx_relu = F.softplus
+relu = F.relu
 ce = torch.nn.CrossEntropyLoss(reduction='none')
 
 ################################# LOSSES #######################################
@@ -64,6 +65,16 @@ class OrdinalLoss(torch.nn.Module):
         probs = self.to_proba(ypred)
         classes = to_classes(probs, method)
         return classes
+
+    def to_scores(self, ypred):
+        # output -> scalar rank score. by default, the output (if single output)
+        # ot the expected value (from the probabilities).
+        if self.how_many_outputs() == 1:
+            return ypred[:, 0]
+        device = ypred.device
+        probs = self.to_proba(ypred)
+        kk = torch.arange(self.K, device=ypred.device, dtype=torch.float32)[None]
+        return torch.sum(kk * probs, 1)
 
 ################################################################################
 # Classical losses.                                                            #
@@ -140,7 +151,7 @@ class OrdinalEncoding(OrdinalLoss):
         probs = torch.sigmoid(ypred)
         prob_0 = 1-probs[:, [0]]
         prob_k = probs[:, [-1]]
-        probs = torch.cat((prob0, probs[:, :-1]-probs[:, 1:], prob_k), 1)
+        probs = torch.cat((prob_0, probs[:, :-1]-probs[:, 1:], prob_k), 1)
         # there may be small discrepancies
         probs = torch.clamp(probs, 0, 1)
         probs = probs / probs.sum(1, keepdim=True)
@@ -154,39 +165,6 @@ class OrdinalEncoding(OrdinalLoss):
             # same as sigmoid(yp)>0.5
             return torch.sum(ypred >= 0, 1)
         return super().to_classes(ypred, method)
-
-################################################################################
-# Polat, Gorkem, et al. "Class Distance Weighted Cross-Entropy Loss for        #
-# Ulcerative Colitis Severity Estimation." arXiv preprint arXiv:2202.05167     #
-# (2022). https://arxiv.org/pdf/2202.05167.pdf                                 #
-################################################################################
-# Castagnos, François, Martin Mihelich, and Charles Dognin. "A Simple Log-     #
-# -based Loss Function for Ordinal Text Classification." Proceedings of the    #
-# 29th International Conference on Computational Linguistics. 2022.            #
-# https://aclanthology.org/2022.coling-1.407.pdf                               #
-################################################################################
-# These two papers propose something identical. Not sure which paper came      #
-# first. Interestingly, CDW_CE recommends alpha=5, while OrdinalLogLoss        #
-# recommends alpha=1.5 (which for us also works better).                       #
-################################################################################
-
-class CDW_CE(OrdinalLoss):
-    def __init__(self, K, alpha=5):
-        super().__init__(K)
-        self.alpha = alpha
-
-    def d(self, y):
-        # internal function for the distance penalization. you may overload
-        # this function if you want to use another.
-        i = torch.arange(self.K, device=y.device)
-        return torch.abs(i[None] - y[:, None])**self.alpha
-
-    def forward(self, ypred, ytrue):
-        ypred = F.softmax(ypred, 1)
-        return -torch.sum(torch.log(1-ypred) * self.d(ytrue), 1)
-
-    def to_proba(self, ypred):
-        return F.softmax(ypred, 1)
 
 ################################################################################
 # da Costa, Joaquim F. Pinto, Hugo Alonso, and Jaime S. Cardoso. "The unimodal #
@@ -209,7 +187,7 @@ class BinomialUnimodal_CE(OrdinalLoss):
         return torch.exp(self.to_log_proba(ypred))
 
     def to_log_proba(self, ypred):
-        # used internally by the loss in forward()
+        # used internally by the loss in compute_loss()
         device = ypred.device
         log_probs = F.logsigmoid(ypred)
         log_inv_probs = F.logsigmoid(-ypred)
@@ -308,7 +286,100 @@ class HO2(OrdinalLoss):
         return F.softmax(ypred, 1)
 
 ################################################################################
-# PROPOSED LOSSES.                                                             #
+# Albuquerque, Tomé, Ricardo Cruz, and Jaime S. Cardoso. "Quasi-Unimodal       #
+# Distributions for Ordinal Classification." Mathematics 10.6 (2022): 980.     #
+# https://www.mdpi.com/2227-7390/10/6/980                                      #
+################################################################################
+# These losses require two parameters: omega and lambda.                       #
+# The default omega value comes from the paper.                                #
+# The default lambda values comes from our experiments.                        #
+################################################################################
+
+def quasi_neighbor_term(ypred, ytrue, margin):
+    margin = torch.tensor(margin, device=ytrue.device)
+    P = F.softmax(ypred, 1)
+    K = P.shape[1]
+    ix = torch.arange(len(P))
+
+    # force close neighborhoods to be inferior to True class prob
+    has_left = ytrue > 0
+    close_left = has_left * relu(margin+P[ix, ytrue-1]-P[ix, ytrue])
+    has_right = ytrue < K-1
+    close_right = has_right * relu(margin+P[ix, (ytrue+1)%K]-P[ix, ytrue])
+
+    # force distant probabilities to be inferior than close neighborhoods of true class
+    left = torch.arange(K, device=ytrue.device)[None] < ytrue[:, None]-1
+    distant_left = torch.sum(left * relu(margin+P-P[ix, ytrue-1][:, None]), 1)
+    right = torch.arange(K, device=ytrue.device)[None] > ytrue[:, None]+1
+    distant_right = torch.sum(right * relu(margin+P-P[ix, (ytrue+1)%K][:, None]), 1)
+
+    return close_left + close_right + distant_left + distant_right
+
+class QUL_CE(OrdinalLoss):
+    def __init__(self, K, lamda=0.1, omega=0.05):
+        super().__init__(K)
+        self.lamda = lamda
+        self.omega = omega
+
+    def forward(self, ypred, ytrue):
+        term = quasi_neighbor_term(ypred, ytrue, self.omega)
+        return ce(ypred, ytrue) + self.lamda*term
+
+    def to_proba(self, ypred):
+        return F.softmax(ypred, 1)
+
+class QUL_HO(OrdinalLoss):
+    def __init__(self, K, lamda=10., omega=0.05):
+        super().__init__(K)
+        self.lamda = lamda
+        self.omega = omega
+
+    def forward(self, ypred, ytrue):
+        term = quasi_neighbor_term(ypred, ytrue, self.omega)
+        return entropy_term(ypred) + self.lamda*term
+
+    def to_proba(self, ypred):
+        return F.softmax(ypred, 1)
+
+################################################################################
+# Polat, Gorkem, et al. "Class Distance Weighted Cross-Entropy Loss for        #
+# Ulcerative Colitis Severity Estimation." arXiv preprint arXiv:2202.05167     #
+# (2022). https://arxiv.org/pdf/2202.05167.pdf                                 #
+################################################################################
+# Castagnos, François, Martin Mihelich, and Charles Dognin. "A Simple Log-     #
+# -based Loss Function for Ordinal Text Classification." Proceedings of the    #
+# 29th International Conference on Computational Linguistics. 2022.            #
+# https://aclanthology.org/2022.coling-1.407.pdf                               #
+################################################################################
+# These two papers propose something identical. Not sure which paper came      #
+# first. Interestingly, CDW_CE recommends alpha=5, while OrdinalLogLoss        #
+# recommends alpha=1.5 (which for us also works better).                       #
+################################################################################
+
+class CDW_CE(OrdinalLoss):
+    def __init__(self, K, alpha=5):
+        super().__init__(K)
+        self.alpha = alpha
+
+    def d(self, y):
+        # internal function for the distance penalization. you may overload
+        # this function if you want to use another.
+        i = torch.arange(self.K, device=y.device)
+        return torch.abs(i[None] - y[:, None])**self.alpha
+
+    def forward(self, ypred, ytrue):
+        ypred = F.softmax(ypred, 1)
+        return -torch.sum(torch.log(1-ypred) * self.d(ytrue), 1)
+
+    def to_proba(self, ypred):
+        return F.softmax(ypred, 1)
+
+class OrdinalLogLoss(CDW_CE):
+    def __init__(self, K, alpha=1.5):
+        super().__init__(K, alpha)
+
+################################################################################
+# To be published.                                                             #
 # Jaime S. Cardoso, Ricardo Cruz and Tomé Albuquerque, 2022.                   #
 ################################################################################
 
@@ -321,7 +392,7 @@ class UnimodalNet(OrdinalLoss):
 
     def activation(self, ypred):
         # first use relu: we need everything positive
-        # for differentiable reasons, we use leaky relu
+        # for differentiable reasons, we use softplus
         ypred = approx_relu(ypred)
         # if output=[X,Y,Z] => pos_slope=[X,X+Y,X+Y+Z]
         # if output=[X,Y,Z] => neg_slope=[Z,Z+Y,Z+Y+X]
