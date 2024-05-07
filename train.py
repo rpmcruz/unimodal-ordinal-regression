@@ -7,7 +7,6 @@ parser.add_argument('--datadir', default='/data')
 parser.add_argument('--lamda', type=float)
 parser.add_argument('--epochs', type=int, default=100)
 parser.add_argument('--batchsize', type=int, default=256)
-parser.add_argument('--mlp', action='store_true')
 args = parser.parse_args()
 
 from torchvision.models import resnet18, ResNet18_Weights
@@ -46,17 +45,18 @@ else:
 
 ############################## MODEL ##############################
 
-if args.mlp:
+if ds.modality == 'tabular':
     class MLP(torch.nn.Module):
         def __init__(self, ninputs, hidden, noutputs):
-            self.dense1 = torch.nn.Linear(ninputs, 128) 
-            self.dense2 = torch.nn.Linear(128, noutputs)
+            super().__init__()
+            self.dense1 = torch.nn.Linear(ninputs, hidden)
+            self.dense2 = torch.nn.Linear(hidden, noutputs)
         def forward(self, x):
             x = self.dense1(x)
             x = torch.nn.functional.relu(x)
             x = self.dense2(x)
             return x
-    model = MLP()
+    model = MLP(ds[0][0].shape[0], 128, loss_fn.how_many_outputs())
 else:
     model = resnet18(weights=ResNet18_Weights.DEFAULT)
     model.fc = torch.nn.Linear(512, loss_fn.how_many_outputs())

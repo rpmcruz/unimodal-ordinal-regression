@@ -22,6 +22,7 @@ def split(fold, rep, files, labels):
     return [files[i] for i in ix], [labels[i] for i in ix]
 
 class ImageDataset(Dataset):
+    modality = 'image'
     def __len__(self):
         return len(self.files)
 
@@ -115,6 +116,7 @@ class FOCUSPATH(ImageDataset):
         self.files, self.labels = split(fold, rep, self.files, self.labels)
 
 class TabularDataset(Dataset):
+    modality = 'tabular'
     def __init__(self, root, fname, sep, cols_ignore, cols_category, col_label, labels, discretize_nbins, fold, rep):
         fname = os.path.join(root, fname)
         df = pd.read_csv(fname, header=None, sep=sep)
@@ -127,7 +129,7 @@ class TabularDataset(Dataset):
         if discretize_nbins:
             Y = Y.to_numpy(np.int64)-1
             bins = np.linspace(0, Y.max(), discretize_nbins, False)
-            Y = np.digitize(Y, bins)
+            Y = np.digitize(Y, bins)-1
         elif labels:
             Y = np.array([labels.index(y) for y in Y], np.int64)
         else:
@@ -158,16 +160,25 @@ if __name__ == '__main__':
     import argparse
     parser = argparse.ArgumentParser()
     parser.add_argument('dataset')
-    parser.add_argument('--datadir', default='/data')
+    parser.add_argument('--datadir', default='/data/ordinal')
     args = parser.parse_args()
     import matplotlib.pyplot as plt
     ds = globals()[args.dataset]
-    print('total size:', len(ds(args.datadir, None, 'train', 0)) + len(ds(args.datadir, None, 'test', 0)))
-    ds = ds(args.datadir, None, 'train', 0)
-    i = np.random.choice(len(ds))
-    print('K:', ds.K)
-    print('training N:', len(ds))
-    x, y = ds[i]
-    plt.imshow(x.permute(1, 2, 0))
-    plt.title(y)
-    plt.show()
+    tr = ds(args.datadir, None, 'train', 0)
+    ts = ds(args.datadir, None, 'test', 0)
+    ds = tr
+    N = len(tr)+len(ts)
+    K = ds.K
+    print('N:', N)
+    print('K:', K)
+    # IR comes from https://ieeexplore.ieee.org/document/6940273
+    Nk = np.bincount([y for _, y in tr] + [y for _, y in ts])
+    # remove zeros, otherwise we cannot compute this
+    Nk = [n for n in Nk if n > 0]
+    Nj = [sum(Nk[j] for j in range(len(Nk)) if j != k) for k in range(len(Nk))]
+    print('Nk:', Nk)
+    print('Nj:', Nj)
+    IRk = [Nj[k]/((len(Nk)-1)*Nk[k]) for k in range(len(Nk))]
+    print('IRk:', IRk)
+    IR = np.mean(IRk)
+    print('IR:', IR)
