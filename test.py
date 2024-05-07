@@ -86,7 +86,7 @@ if args.only_metric is not None:
 
 results = torch.stack([compute_metrics(rep, metrics_list) for rep in args.reps])
 #print(args.loss.replace('_', r'\_'), end='')
-print(args.dataset, args.loss, sep=' & ', end='')
+#print(args.dataset, args.loss, sep=' & ', end='')
 if args.print_lambda:
     print(f' & {args.lamda}', end='')
 if len(args.reps) == 1:

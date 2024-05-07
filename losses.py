@@ -274,6 +274,70 @@ class PoissonUnimodal(OrdinalLoss):
         KK = torch.arange(1., self.K+1, device=ypred.device)[None]
         return KK*torch.log(ypred) - ypred - log_fact(KK)
 
+
+################################################################################
+# Liu, Xiaofeng, et al. "Unimodal regularized neuron stick-breaking for        #
+# ordinal classification." Neurocomputing 388 (2020): 34-44.                   #
+# https://www.sciencedirect.com/science/article/pii/S0925231220300618          #
+################################################################################
+
+class NeuronStickBreaking(OrdinalMethod):
+    def how_many_outputs(self):
+        return self.K-1
+
+    def activation(self, ypred):
+        P = torch.sigmoid(ypred)
+        ones = torch.ones(len(P), 1, device=P.device)
+        invcum_P = torch.cumprod(1-P, 1)
+        return torch.cat((P, ones), 1) * torch.cat((ones, invcum_P), 1)
+
+    def forward(self, ypred, ytrue):
+        ypred = self.activation(ypred)
+        if len(ytrue.shape) == 1:
+            ytrue = F.one_hot(ytrue, self.K).float()
+        return torch.sum(F.binary_cross_entropy(ypred, ytrue, reduction='none'), 1)
+
+    def to_probabilities(self, ypred):
+        return self.activation(ypred)
+
+class UnimodalRegularization(OrdinalMethod):
+    def uniform(self, i, y): return 1/K
+    def poisson(self, i, y): return (((y+1)**i)*torch.exp(-(y+1))/fact(i)) / torch.sum(((y+1)**i)*torch.exp(-(y+1))/fact(i), 1)
+    # for binomial, not sure what they have done, but I am taking
+    # p=(y+1)/(K+1) so that the mean is y
+    def binomial(self, i, y): return (fact(K)/(fact(i)*fact(K-i))) * ((y+1)/(K+1)) * ((1-(y+1)/(K+1))**(K-i))
+    def exp(self, i, y): return torch.softmax(-torch.abs(i-y)/self.tau, 1)
+
+    # unimodal label smoothing technique, proposed by NeuronStickBreaking, but
+    # can be used by other ordinal methods, such as CrossEntropy
+    # q(i, l) = (1-eta)*onehot(i, l) + eta*f(i, l)
+    # where i=class index, l=ground-truth, f=smoothness function
+    def __init__(self, K, ordinal_method=NeuronStickBreaking, f='exp', eta=0.15, tau=1):
+        super().__init__(K)
+        assert 0 <= eta <= 1
+        self.ordinal_method = ordinal_method(K)
+        self.f = getattr(UnimodalRegularization, f)
+        self.eta = eta
+        self.tau = tau
+
+    def how_many_outputs(self):
+        return self.ordinal_method.how_many_outputs()
+
+    def forward(self, ypred, ytrue):
+        ii = torch.arange(self.K, device=ypred.device)[None]
+        yy = ytrue[:, None]
+        delta = (ii == yy).float()
+        ytrue = self.eta*delta + (1-self.eta)*self.f(self, ii, yy)
+        return self.ordinal_method.compute_loss(ypred, ytrue)
+
+    def to_probabilities(self, ypred):
+        return self.ordinal_method.to_probabilities(ypred)
+
+class CrossEntropy_UR(UnimodalRegularization):
+    # convenience class to test CE w/ UR
+    def __init__(self, K, f='exp', eta=0.15, tau=1):
+        super().__init__(K, CrossEntropy, f, eta, tau)
+
 ################################################################################
 # Albuquerque, Tomé, Ricardo Cruz, and Jaime S. Cardoso. "Ordinal losses for   #
 # classification of cervical cancer risk." PeerJ Computer Science 7 (2021):    #

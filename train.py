@@ -5,7 +5,6 @@ parser.add_argument('loss')
 parser.add_argument('rep', type=int)
 parser.add_argument('--datadir', default='/data')
 parser.add_argument('--lamda', type=float)
-parser.add_argument('--epochs', type=int, default=100)
 parser.add_argument('--batchsize', type=int, default=256)
 args = parser.parse_args()
 
@@ -46,23 +45,17 @@ else:
 ############################## MODEL ##############################
 
 if ds.modality == 'tabular':
-    class MLP(torch.nn.Module):
-        def __init__(self, ninputs, hidden, noutputs):
-            super().__init__()
-            self.dense1 = torch.nn.Linear(ninputs, hidden)
-            self.dense2 = torch.nn.Linear(hidden, noutputs)
-        def forward(self, x):
-            x = self.dense1(x)
-            x = torch.nn.functional.relu(x)
-            x = self.dense2(x)
-            return x
-    model = MLP(ds[0][0].shape[0], 128, loss_fn.how_many_outputs())
+    model = torch.nn.Sequential(
+        torch.nn.Linear(ds[0][0].shape[0], 128),
+        torch.nn.ReLU(),
+        torch.nn.Linear(128, loss_fn.how_many_outputs()),
+    )
+    epochs = 1000
 else:
     model = resnet18(weights=ResNet18_Weights.DEFAULT)
     model.fc = torch.nn.Linear(512, loss_fn.how_many_outputs())
+    epochs = 100
 model = model.to(device)
-loss_fn.to(device)
-model.loss_fn = loss_fn
 
 ############################## TRAIN OPTS ##############################
 
@@ -71,8 +64,8 @@ opt = torch.optim.Adam(model.parameters(), 1e-4)
 ############################## TRAIN ##############################
 
 model.train()
-for epoch in range(args.epochs):
-    print(f'* Epoch {epoch+1}/{args.epochs}')
+for epoch in range(epochs):
+    print(f'* Epoch {epoch+1}/{epochs}')
     tic = time()
     avg_loss = 0
     for X, Y in tr:
