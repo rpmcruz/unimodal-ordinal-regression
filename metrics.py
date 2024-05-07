@@ -40,3 +40,23 @@ def is_unimodal(p):
 
 def times_unimodal_wasserstein(ppred, ypred, ytrue):
     return sum(is_unimodal(p) for p in ppred) / len(ppred)
+
+def confusion_matrix(ypred, ytrue):
+    num_classes = 1+max(ypred.amax(), ytrue.amax())
+    confusion = torch.zeros(num_classes, num_classes, dtype=torch.long)
+    for t, p in zip(ytrue, ypred):
+        confusion[t, p] += 1
+    return confusion
+
+def quadratic_weighted_kappa(ppred, ypred, ytrue):
+    O = confusion_matrix(ytrue, ypred)  # observed agreement
+    E = torch.outer(O.sum(0), O.sum(1))  # expected agreement
+    # normalize
+    O = O / torch.sum(O)
+    E = E / torch.sum(E)
+    # quadratic weighted kappa
+    n = O.shape[0]
+    weights = ((torch.arange(n) - torch.arange(n)[:, None])**2) / ((n-1)**2)
+    num = torch.sum(weights * O)
+    den = torch.sum(weights * E)
+    return 1 - (num / den)

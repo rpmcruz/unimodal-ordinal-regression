@@ -164,7 +164,51 @@ class OrdinalEncoding(OrdinalLoss):
             # notice we are working on the logit space, therefore yp>0 is the
             # same as sigmoid(yp)>0.5
             return torch.sum(ypred >= 0, 1)
-        return super().to_classes(ypred, method)
+        probs = torch.sigmoid(ypred)
+        return super().to_classes(probs, method)
+
+################################################################################
+# McCullagh, Peter. "Regression models for ordinal data." Journal of the Royal #
+# Statistical Society: Series B (Methodological) 42.2 (1980): 109-127.         #
+# https://rss.onlinelibrary.wiley.com/doi/abs/10.1111/j.2517-6161.1980.tb01109.x
+# This work preceeds OrdinalEncoding, but it is similar, except that weights   #
+# are shared, only biases are different. Furthermore, it learns P(Y≤j).        #
+# P(Y≤j|x) = sigmoid(θⱼ + βx)                                                  #
+################################################################################
+
+class POM(OrdinalLoss):
+    def __init__(self, K):
+        super().__init__(K)
+        biases = torch.zeros(self.K-1)
+        self.biases = torch.nn.parameter.Parameter(biases[None])
+
+    def how_many_outputs(self):
+        return 1
+
+    def forward(self, ypred, ytrue):
+        ypred = self.biases - ypred
+        KK = torch.arange(self.K-1, device=ytrue.device).expand(len(ytrue), -1)
+        yytrue = (ytrue[:, None] <= KK).float()
+        return torch.sum(F.binary_cross_entropy_with_logits(ypred, yytrue, reduction='none'), 1)
+
+    def to_proba(self, ypred):
+        # P(Y=k) = P(Y≤k)-P(Y≤k-1)
+        ypred = self.biases - ypred
+        probs = torch.sigmoid(ypred)
+        last_probs = 1-probs[:, [-1]]
+        probs[:, 1:] = probs[:, 1:]-probs[:, 0:-1]
+        probs = torch.cat((probs, last_probs), 1)
+        # there may be small discrepancies
+        probs = torch.clamp(probs, 0, 1)
+        probs = probs / probs.sum(1, keepdim=True)
+        return probs
+
+    def to_classes(self, ypred, method=None):
+        if method is None:
+            # if none, use the biases as thresholds in the logit space
+            return torch.bucketize(ypred[:, 0], self.biases[0])
+        probs = self.to_proba(ypred)
+        return super().to_classes(probs, method)
 
 ################################################################################
 # da Costa, Joaquim F. Pinto, Hugo Alonso, and Jaime S. Cardoso. "The unimodal #

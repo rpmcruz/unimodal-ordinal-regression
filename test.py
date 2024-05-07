@@ -36,6 +36,7 @@ if args.loss != 'DummyModel':
 ############################## EVAL ##############################
 
 def compute_metrics(rep, metrics_list):
+    global loss_fn
     ts = ds(args.datadir, transform, 'test', rep)
     ts = DataLoader(ts, 64, num_workers=4, pin_memory=True)
     if args.lamda is None:
@@ -54,6 +55,8 @@ def compute_metrics(rep, metrics_list):
     else:
         model = torch.load(model_name, map_location=device)
         model.eval()
+    if hasattr(model, 'loss_fn'):
+        loss_fn = model.loss_fn
     YY_pred = []
     YY_true = []
     for X, Y in ts:
@@ -71,10 +74,11 @@ def compute_metrics(rep, metrics_list):
 
 metrics_list = [
     metrics.Percentage(metrics.acc),
+    metrics.Percentage(metrics.quadratic_weighted_kappa),
     metrics.mae,
     metrics.Percentage(metrics.times_unimodal_wasserstein),
 ]
-precisions = [2, 3, 2]
+precisions = [2, 3, 2, 2]
 
 if args.only_metric is not None:
     metrics_list = [metrics_list[args.only_metric]]
@@ -82,6 +86,7 @@ if args.only_metric is not None:
 
 results = torch.stack([compute_metrics(rep, metrics_list) for rep in args.reps])
 #print(args.loss.replace('_', r'\_'), end='')
+print(args.dataset, args.loss, sep=' & ', end='')
 if args.print_lambda:
     print(f' & {args.lamda}', end='')
 if len(args.reps) == 1:

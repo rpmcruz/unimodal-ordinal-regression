@@ -47,15 +47,22 @@ else:
 ############################## MODEL ##############################
 
 if args.mlp:
-    model = torch.nn.Sequential(
-        torch.nn.Linear(ds[0][0].shape[0], 128),
-        torch.nn.ReLU(),
-        torch.nn.Linear(128, loss_fn.how_many_outputs()),
-    )
+    class MLP(torch.nn.Module):
+        def __init__(self, ninputs, hidden, noutputs):
+            self.dense1 = torch.nn.Linear(ninputs, 128) 
+            self.dense2 = torch.nn.Linear(128, noutputs)
+        def forward(self, x):
+            x = self.dense1(x)
+            x = torch.nn.functional.relu(x)
+            x = self.dense2(x)
+            return x
+    model = MLP()
 else:
     model = resnet18(weights=ResNet18_Weights.DEFAULT)
     model.fc = torch.nn.Linear(512, loss_fn.how_many_outputs())
 model = model.to(device)
+loss_fn.to(device)
+model.loss_fn = loss_fn
 
 ############################## TRAIN OPTS ##############################
 
