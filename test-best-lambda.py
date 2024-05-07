@@ -4,7 +4,7 @@ import argparse
 parser = argparse.ArgumentParser()
 parser.add_argument('dataset')
 parser.add_argument('loss')
-parser.add_argument('--datadir', default='/data')
+parser.add_argument('--datadir', default='/data/ordinal')
 args = parser.parse_args()
 
 from torchvision.models import resnet18

@@ -281,7 +281,7 @@ class PoissonUnimodal(OrdinalLoss):
 # https://www.sciencedirect.com/science/article/pii/S0925231220300618          #
 ################################################################################
 
-class NeuronStickBreaking(OrdinalMethod):
+class NeuronStickBreaking(OrdinalLoss):
     def how_many_outputs(self):
         return self.K-1
 
@@ -300,7 +300,7 @@ class NeuronStickBreaking(OrdinalMethod):
     def to_probabilities(self, ypred):
         return self.activation(ypred)
 
-class UnimodalRegularization(OrdinalMethod):
+class UnimodalRegularization(OrdinalLoss):
     def uniform(self, i, y): return 1/K
     def poisson(self, i, y): return (((y+1)**i)*torch.exp(-(y+1))/fact(i)) / torch.sum(((y+1)**i)*torch.exp(-(y+1))/fact(i), 1)
     # for binomial, not sure what they have done, but I am taking
@@ -328,7 +328,7 @@ class UnimodalRegularization(OrdinalMethod):
         yy = ytrue[:, None]
         delta = (ii == yy).float()
         ytrue = self.eta*delta + (1-self.eta)*self.f(self, ii, yy)
-        return self.ordinal_method.compute_loss(ypred, ytrue)
+        return self.ordinal_method(ypred, ytrue)
 
     def to_probabilities(self, ypred):
         return self.ordinal_method.to_probabilities(ypred)

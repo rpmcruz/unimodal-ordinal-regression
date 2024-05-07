@@ -3,9 +3,9 @@ parser = argparse.ArgumentParser()
 parser.add_argument('dataset')
 parser.add_argument('loss')
 parser.add_argument('rep', type=int)
-parser.add_argument('--datadir', default='/data')
+parser.add_argument('--datadir', default='/data/ordinal')
 parser.add_argument('--lamda', type=float)
-parser.add_argument('--batchsize', type=int, default=256)
+parser.add_argument('--batchsize', type=int, default=32)
 args = parser.parse_args()
 
 from torchvision.models import resnet18, ResNet18_Weights
