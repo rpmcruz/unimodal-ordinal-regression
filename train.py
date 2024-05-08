@@ -70,6 +70,7 @@ opt = torch.optim.Adam(model.parameters(), 1e-4)
 
 ############################## TRAIN ##############################
 
+train_time = 0
 model.train()
 for epoch in range(epochs):
     print(f'* Epoch {epoch+1}/{epochs}')
@@ -86,5 +87,7 @@ for epoch in range(epochs):
         avg_loss += float(loss_value) / len(tr)
     toc = time()
     print(f'- {toc-tic:.0f}s - Loss: {avg_loss}')
+    train_time += toc-tic
 
+model.train_time = train_time
 torch.save(model.cpu(), fname)
