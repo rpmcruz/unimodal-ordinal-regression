@@ -1,13 +1,15 @@
 #!/bin/bash
 
 DATASETS="HCI ICIAR FGNET SMEAR2005 FOCUSPATH ABALONE5 ABALONE10 BALANCE_SCALE CAR NEW_THYROID"
+DATASETS="$1"
 LOSSES="CrossEntropy POM OrdinalEncoding CrossEntropy_UR CDW_CE BinomialUnimodal_CE PoissonUnimodal UnimodalNet"
+LOSSES=""
 LOSSES_LAMBDA="WassersteinUnimodal_KLDIV WassersteinUnimodal_Wass CO2 HO2"
 LOSSES_LAMBDA=""
 LAMDAS="0.001 0.01 0.1 1 10 100 1000"
 REPS=`seq 1 4`
 
-if [ $2 -eq "lambda" ]; then
+if [ "$2" = "lambda" ]; then
 LOSSES_LAMBDA="$3"
 else
 LOSSES="$3"
@@ -17,6 +19,10 @@ for DATASET in $DATASETS; do
     for LOSS in $LOSSES; do
         for REP in $REPS; do
             echo "python3 train.py $DATASET $LOSS $REP"
+            if [ -f "model-$DATASET-$LOSS-$REP.pth" ]; then
+                echo "skip, file exists"
+                continue
+            fi
             python3 train.py $DATASET $LOSS $REP &
         done
         wait

@@ -45,17 +45,24 @@ else:
 ############################## MODEL ##############################
 
 if ds.modality == 'tabular':
-    model = torch.nn.Sequential(
-        torch.nn.Linear(ds[0][0].shape[0], 128),
-        torch.nn.ReLU(),
-        torch.nn.Linear(128, loss_fn.how_many_outputs()),
-    )
+    class MLP(torch.nn.Module):
+        def __init__(self, ninputs, nhidden, noutputs):
+            super().__init__()
+            self.dense1 = torch.nn.Linear(ninputs, nhidden)
+            self.dense2 = torch.nn.Linear(nhidden, noutputs)
+        def forward(self, x):
+            x = self.dense1(x)
+            x = torch.nn.functional.relu(x)
+            return self.dense2(x)
+    model = MLP(ds[0][0].shape[0], 128, loss_fn.how_many_outputs())
     epochs = 1000
 else:
     model = resnet18(weights=ResNet18_Weights.DEFAULT)
     model.fc = torch.nn.Linear(512, loss_fn.how_many_outputs())
     epochs = 100
+loss_fn.to(device)
 model = model.to(device)
+model.loss_fn = loss_fn
 
 ############################## TRAIN OPTS ##############################
 
