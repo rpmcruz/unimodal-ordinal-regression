@@ -1,51 +1,73 @@
 #!/bin/bash
 
-DATASETS="HCI ICIAR FGNET SMEAR2005 FOCUSPATH ABALONE5 ABALONE10 BALANCE_SCALE CAR NEW_THYROID"
-DATASETS="$1"
+#DATASETS="HCI ICIAR FGNET SMEAR2005 FOCUSPATH ABALONE5 ABALONE10 BALANCE_SCALE CAR NEW_THYROID"
+DATASETS="FOCUSPATH"
 LOSSES="CrossEntropy POM OrdinalEncoding CrossEntropy_UR CDW_CE BinomialUnimodal_CE PoissonUnimodal UnimodalNet"
-LOSSES=""
+LOSSES=$1
 LOSSES_LAMBDA="WassersteinUnimodal_KLDIV WassersteinUnimodal_Wass CO2 HO2"
-LOSSES_LAMBDA=""
 LAMDAS="0.001 0.01 0.1 1 10 100 1000"
 REPS=`seq 1 4`
 
-if [ "$2" = "lambda" ]; then
-LOSSES_LAMBDA="$3"
-else
-LOSSES="$3"
-fi
-
 for DATASET in $DATASETS; do
     for LOSS in $LOSSES; do
+        # train also split=0 because we use it to produce probabilities figure
+        NAME="model-$DATASET-$LOSS-0.pth"
+        echo $NAME
+        if [ -f $NAME ]; then
+            echo "skip, file exists"
+            continue
+        fi
+        python3 train.py $DATASET $LOSS 0 $NAME
+
         for REP in $REPS; do
             echo "python3 train.py $DATASET $LOSS $REP"
-            if [ -f "model-$DATASET-$LOSS-$REP.pth" ]; then
+            NAME="model-$DATASET-$LOSS-$REP.pth"
+            echo $NAME
+            if [ -f $NAME ]; then
                 echo "skip, file exists"
                 continue
             fi
-            python3 train.py $DATASET $LOSS $REP &
+            python3 train.py $DATASET $LOSS $REP $NAME &
         done
-        wait
+        #wait
     done
     for LOSS in $LOSSES_LAMBDA; do
         LAMDAS="0.001 0.01 0.1"
         for LAMDA in $LAMDAS; do
             echo "python3 train.py $DATASET $LOSS 0 --lamda $LAMDA"
-            python3 train.py $DATASET $LOSS 0 --lamda $LAMDA &
+            NAME="model-$DATASET-$LOSS-0-lambda-$LAMDA.pth"
+            echo $NAME
+            if [ -f $NAME ]; then
+                echo "skip, file exists"
+                continue
+            fi
+            python3 train.py $DATASET $LOSS 0 $NAME --lamda $LAMDA &
         done
-        wait
+        #wait
         LAMDAS="1 10 100 1000"
         for LAMDA in $LAMDAS; do
             echo "python3 train.py $DATASET $LOSS 0 --lamda $LAMDA"
-            python3 train.py $DATASET $LOSS 0 --lamda $LAMDA &
+            NAME="model-$DATASET-$LOSS-0-lambda-$LAMDA.pth"
+            echo $NAME
+            if [ -f $NAME ]; then
+                echo "skip, file exists"
+                continue
+            fi
+            python3 train.py $DATASET $LOSS 0 $NAME --lamda $LAMDA &
         done
-        wait
+        #wait
 
-        LAMBDA=`python3 test-best-lambda.py $DATASET $LOSS`
+        LAMDA=`python3 test-best-lambda.py $DATASET $LOSS`
         for REP in $REPS; do
-            echo "python3 train.py $DATASET $LOSS $REP --lamda $LAMBDA"
-            python3 train.py $DATASET $LOSS $REP --lamda $LAMBDA &
+            echo "python3 train.py $DATASET $LOSS $REP --lamda $LAMDA"
+            NAME="model-$DATASET-$LOSS-$REP-lambda-$LAMDA.pth"
+            echo $NAME
+            if [ -f $NAME ]; then
+                echo "skip, file exists"
+                continue
+            fi
+            python3 train.py $DATASET $LOSS $REP $NAME --lamda $LAMDA &
         done
-        wait
+        #wait
     done
 done

@@ -60,3 +60,21 @@ def quadratic_weighted_kappa(ppred, ypred, ytrue):
     num = torch.sum(weights * O)
     den = torch.sum(weights * E)
     return 1 - (num / den)
+
+def zero_mean_error(ppred, ypred, ytrue):
+    # https://www.youtube.com/watch?v=uRb6Fi44ww0
+    # the average of the residuals should be zero
+    residuals = ypred - ytrue
+    return torch.mean(residuals.float())
+
+def negative_log_likelihood(ppred, ypred, ytrue):
+    # ce = -(y=1)*log(p̂) <=> -log(p̂[y])
+    return torch.mean(-torch.log(1e-6+ppred[range(len(ytrue)), ytrue]))
+
+def spearman(ppred, ypred, ytrue):
+    import scipy.stats
+    return scipy.stats.spearmanr(ypred, ytrue).statistic
+
+def kendall_tau(ppred, ypred, ytrue):
+    import scipy.stats
+    return scipy.stats.kendalltau(ypred, ytrue).statistic

@@ -1,5 +1,9 @@
 # We are following the same recipe as https://arxiv.org/abs/1911.10720
 
+# silence warning when using this without GPU
+import warnings
+warnings.filterwarnings('ignore', message="Can't initialize NVML")
+
 import argparse
 parser = argparse.ArgumentParser()
 parser.add_argument('dataset')
@@ -13,6 +17,7 @@ from torchvision import transforms
 from time import time
 import torch
 import metrics, losses, data
+from models import MLP
 
 device = 'cuda' if torch.cuda.is_available() else 'cpu'
 
@@ -59,6 +64,6 @@ metrics_list = [
     metrics.mae,
 ]
 
-lambdas = [0.001, 0.01, 0.1, 1., 10., 100., 1000.]
+lambdas = ['0.001', '0.01', '0.1', '1', '10', '100', '1000']
 results = [compute_metrics(0, metrics_list, lamda)[0] for lamda in lambdas]
 print(lambdas[torch.argmin(torch.stack(results))])

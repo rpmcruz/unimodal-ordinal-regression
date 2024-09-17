@@ -297,7 +297,7 @@ class NeuronStickBreaking(OrdinalLoss):
             ytrue = F.one_hot(ytrue, self.K).float()
         return torch.sum(F.binary_cross_entropy(ypred, ytrue, reduction='none'), 1)
 
-    def to_probabilities(self, ypred):
+    def to_proba(self, ypred):
         return self.activation(ypred)
 
 class UnimodalRegularization(OrdinalLoss):
@@ -330,8 +330,8 @@ class UnimodalRegularization(OrdinalLoss):
         ytrue = self.eta*delta + (1-self.eta)*self.f(self, ii, yy)
         return self.ordinal_method(ypred, ytrue)
 
-    def to_probabilities(self, ypred):
-        return self.ordinal_method.to_probabilities(ypred)
+    def to_proba(self, ypred):
+        return self.ordinal_method.to_proba(ypred)
 
 class CrossEntropy_UR(UnimodalRegularization):
     # convenience class to test CE w/ UR

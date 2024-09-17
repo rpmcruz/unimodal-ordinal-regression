@@ -7,6 +7,7 @@ parser.add_argument('--classes', nargs='+', type=int)
 parser.add_argument('--interval', default=21, type=int)
 parser.add_argument('--split', default='test')
 parser.add_argument('--fold', default=0, type=int)
+parser.add_argument('--models', nargs='+')
 args = parser.parse_args()
 
 import torch
@@ -24,17 +25,18 @@ device = 'cuda' if torch.cuda.is_available() else 'cpu'
 our_methods = frozenset(('UnimodalNet', 'WassersteinUnimodal_Wass', 'WassersteinUnimodal_KLDIV'))
 losses_map = {
     'CrossEntropy': 'CE',
-    'CDW_CE': 'CE',
+    'POM': 'POM',
+    'CDW_CE': 'CDW',
     'OrdinalEncoding': 'OE',
     'BinomialUnimodal_CE': 'BU',
     'PoissonUnimodal': 'PU',
     'CO2': 'CO2',
     'HO2': 'HO2',
     'UnimodalNet': 'UN*',
+    'CrossEntropy_UR': 'UR',
     'WassersteinUnimodal_Wass': 'WU-Wass*',
     'WassersteinUnimodal_KLDIV': 'WU-KLDiv*',
 }
-losses_list = ['CrossEntropy', 'OrdinalEncoding', 'CDW_CE', 'BinomialUnimodal_CE', 'PoissonUnimodal', 'UnimodalNet', 'WassersteinUnimodal_KLDIV', 'WassersteinUnimodal_Wass', 'CO2', 'HO2']
 
 ############################## DATASET ##############################
 
@@ -86,9 +88,10 @@ else:  # allcorrect
     for (x, y), fname in tqdm(tr):
         x = x.to(device)
         all_correct = True
-        for loss_i, loss in enumerate(losses_list):
-            model = torch.load(f'model-{args.dataset}-{loss}-0.pth', map_location=device)
-            loss_fn = getattr(losses, loss)(K)
+        for model_i, model in enumerate(args.models):
+            loss = model.split('-')[2]
+            model = torch.load(model, map_location=device)
+            loss_fn = model.loss_fn if hasattr(model, 'loss_fn') else getattr(losses, loss)(K)
             model.eval()
             with torch.no_grad():
                 pred = model(x[None])
@@ -107,14 +110,14 @@ print(r'\usepackage[table]{xcolor}')
 print(r'\usepackage{pgfplots}')
 print(r'\pgfplotsset{compat=1.18}')
 print(r'\begin{document}')
-print(r'\begin{figure}')
+print(r'\begin{figure*}')
 print(r'\setlength{\tabcolsep}{0pt}')
 print(r'\makebox[\textwidth]{%')
-print(r'\begin{tabular}{cccccc}')
+print(r'\begin{tabular}{ccccccc}')
 first = True
 for image, label, fname in data:
     if not first:
-        print(r'\\[-5ex]')
+        print(r'\\[-2ex]')
     first = False
     first_class = label - args.interval//2
     second_class = label + args.interval//2
@@ -125,22 +128,24 @@ for image, label, fname in data:
         first_class += second_class-K-1
         second_class = K-1
     image = image[None].to(device)
-    for loss_i, loss in enumerate(losses_list):
-        if loss_i % 5 == 0:
-            if loss_i == 0:
+    for model_i, model in enumerate(args.models):
+        loss = model.split('-')[2]
+        model = torch.load(model, map_location=device)
+        loss_fn = model.loss_fn if hasattr(model, 'loss_fn') else getattr(losses, loss)(K)
+        model.eval()
+        if model_i % 6 == 0:
+            if model_i == 0:
                 print(f'{{\small$y={label}$}}')
-            for _loss in losses_list[loss_i:loss_i+5]:
+            for _model in args.models[model_i:model_i+6]:
+                _loss = _model.split('-')[2]
                 clr = r'\cellcolor{black!10}' if _loss in our_methods else ''
                 print(r' & {\small' + clr + ' ' + losses_map[_loss] + r'}')
             print(r'\\')
-            if loss_i == 0:
-                print(f'\\raisebox{{1.4ex}}{{\includegraphics[width=4em]{{{fname}}}}}')
+            if model_i == 0:
+                print(f'\\raisebox{{9ex}}{{\\multirow{{2}}{{*}}{{{{\includegraphics[width=4em]{{{fname}}}}}}}}}')
         print('&')
         if loss in our_methods:
             print(r'\cellcolor{black!10}')
-        model = torch.load(f'model-{args.dataset}-{loss}-0.pth', map_location=device)
-        loss_fn = getattr(losses, loss)(K)
-        model.eval()
         with torch.no_grad():
             preds = model(image)
             probs = loss_fn.to_proba(preds)
@@ -156,14 +161,14 @@ for image, label, fname in data:
             decimal_places = -math.floor(math.log10(xmax))+1
             xrange = ('0', numpy.format_float_positional(round(xmax + (0.1**decimal_places), decimal_places)))
             xmax = xrange[-1]
-        print(r'\begin{axis}[xbar, width=10em, height=18ex, xmin=0, xmax=' + str(xmax) + ',scaled x ticks=false,axis background/.style={fill=white},ytick={' + ','.join(str(k) for k in range(first_class+1, second_class+1, 6)) + '},xticklabels={' + ','.join(xrange) + '},xtick={' + ','.join(xrange) + '}]')
+        print(r'\begin{axis}[xbar, width=9.5em, height=18ex, xmin=0, xmax=' + str(xmax) + ',scaled x ticks=false,axis background/.style={fill=white},ytick={' + ','.join(str(k) for k in range(first_class+1, second_class+1, 6)) + '},xticklabels={' + ','.join(xrange) + '},xtick={' + ','.join(xrange) + '}]')
         print(r'\addplot [bar shift=0pt, bar width=0.20ex, fill=gray, draw=gray] coordinates {' + ' '.join(f'({numpy.format_float_positional(probs[0, k])}, {k})' for k in range(first_class, second_class+1) if k != label) + r'};')
         # red for the true label
         print(r'\addplot [bar shift=0pt, bar width=0.20ex, fill=red, draw=red] coordinates {' + f'({numpy.format_float_positional(probs[0, label])},{label})' + r'};')
         print(r'\end{axis}')
         print(r'\end{tikzpicture}')
-        if loss_i % 5 == 4:
-            if loss_i == 4:
+        if model_i % 6 == 5:
+            if model_i == 5:
                 print(r'\\[-1ex]')
             else:
                 print(r'\\')
@@ -172,5 +177,5 @@ print(r'\end{tabular}')
 print('}')
 print(f'\caption{{Examples of probabilities outputs for the {args.dataset} dataset. The selection of the examples was made by choosing the first image of each quartile the testing set (fold=0).}}')
 print(r'\label{fig:outputs}')
-print(r'\end{figure}')
+print(r'\end{figure*}')
 print(r'\end{document}')

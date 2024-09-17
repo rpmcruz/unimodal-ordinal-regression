@@ -3,6 +3,7 @@ parser = argparse.ArgumentParser()
 parser.add_argument('dataset')
 parser.add_argument('loss')
 parser.add_argument('rep', type=int)
+parser.add_argument('output')
 parser.add_argument('--datadir', default='/data/ordinal')
 parser.add_argument('--lamda', type=float)
 parser.add_argument('--batchsize', type=int, default=32)
@@ -14,6 +15,7 @@ from torchvision import transforms
 from time import time
 import torch
 import losses, data
+from models import MLP
 
 device = 'cuda' if torch.cuda.is_available() else 'cpu'
 
@@ -37,23 +39,12 @@ tr = DataLoader(ds, args.batchsize, True, num_workers=8, pin_memory=True)
 
 if args.lamda is None:
     loss_fn = getattr(losses, args.loss)(K)
-    fname = f'model-{args.dataset}-{args.loss}-{args.rep}.pth'
 else:
     loss_fn = getattr(losses, args.loss)(K, args.lamda)
-    fname = f'model-{args.dataset}-{args.loss}-{args.rep}-lambda-{args.lamda}.pth'
 
 ############################## MODEL ##############################
 
 if ds.modality == 'tabular':
-    class MLP(torch.nn.Module):
-        def __init__(self, ninputs, nhidden, noutputs):
-            super().__init__()
-            self.dense1 = torch.nn.Linear(ninputs, nhidden)
-            self.dense2 = torch.nn.Linear(nhidden, noutputs)
-        def forward(self, x):
-            x = self.dense1(x)
-            x = torch.nn.functional.relu(x)
-            return self.dense2(x)
     model = MLP(ds[0][0].shape[0], 128, loss_fn.how_many_outputs())
     epochs = 1000
 else:
@@ -90,4 +81,4 @@ for epoch in range(epochs):
     train_time += toc-tic
 
 model.train_time = train_time
-torch.save(model.cpu(), fname)
+torch.save(model.cpu(), args.output)
