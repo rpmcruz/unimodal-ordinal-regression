@@ -274,6 +274,48 @@ class PoissonUnimodal(OrdinalLoss):
         KK = torch.arange(1., self.K+1, device=ypred.device)[None]
         return KK*torch.log(ypred) - ypred - log_fact(KK)
 
+################################################################################
+# Yamasaki, Ryoya. "Unimodal Likelihood Models for Ordinal Data." Transactions #
+# on Machine Learning Research, 2022                                           #
+# https://openreview.net/forum?id=1l0sClLiPc                                   #
+################################################################################
+
+# Basically:
+# ORD-ACL: probabilities=ACL(ORD(X @ β))
+# VS-SL: probabilities=SOFTMAX(-VS(ORD(X @ β)))
+# where ORD transforms logits so its ascending like a stair
+# (logits[0] + cumsum(logits[1:]**2)), ACL normalizes probabilities with adjacents
+# (P(Y)/(P(Y)+P(Y+1)), VS forces logits to look like an inverted V shape (-abs(logits))
+
+class ORD_ACL(OrdinalLoss):
+    def how_many_outputs(self):
+        return self.K-1
+
+    def to_proba(self, logits):
+        zeros = torch.zeros(len(logits), 1, device=logits.device)
+        # ORD
+        ǵ = logits[:, [0]] + torch.cat((zeros, torch.cumsum(logits[:, 1:]**2, 1)), 1)
+        # ACL
+        num = torch.exp(-torch.cat((zeros, torch.cumsum(logits, 1)), 1))
+        den = torch.sum(num, 1, keepdims=True)
+        return num/den
+
+    def forward(self, ypred, ytrue):
+        ypred = self.to_proba(ypred)
+        return -torch.log(1e-6+ypred[range(len(ytrue)), ytrue])  # NLL
+
+class VS_SL(OrdinalLoss):
+    def to_proba(self, logits):
+        zeros = torch.zeros(len(logits), 1, device=logits.device)
+        # ORD
+        ǵ = logits[:, [0]] + torch.cat((zeros, torch.cumsum(logits[:, 1:]**2, 1)), 1)
+        # VS
+        ǧ = torch.abs(ǵ)
+        return torch.softmax(-ǧ, 1)
+
+    def forward(self, ypred, ytrue):
+        ypred = self.to_proba(ypred)
+        return -torch.log(1e-6+ypred[range(len(ytrue)), ytrue])  # NLL
 
 ################################################################################
 # Liu, Xiaofeng, et al. "Unimodal regularized neuron stick-breaking for        #

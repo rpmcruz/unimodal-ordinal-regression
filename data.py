@@ -118,7 +118,7 @@ class FOCUSPATH(ImageDataset):
 class TabularDataset(Dataset):
     modality = 'tabular'
     def __init__(self, root, fname, sep, cols_ignore, cols_category, col_label, labels, discretize_nbins, fold, rep):
-        fname = os.path.join(root, fname)
+        fname = os.path.join(root, 'UCI', fname)
         df = pd.read_csv(fname, header=None, sep=sep)
         X = df.drop(columns=df.columns[col_label])
         Y = df.iloc[:, col_label]
@@ -152,7 +152,7 @@ def BALANCE_SCALE(root, transform, fold, rep):
 def CAR(root, transform, fold, rep):
     return TabularDataset(root, 'car.data', ',', None, None, -1, ['unacc', 'acc', 'good', 'vgood'], None, fold, rep)
 def LENSES(root, transform, fold, rep):
-    return TabularDataset(root, 'lenses.data', '\s+', [0], [1, 2, 3, 4], -1, None, None, fold, rep)
+    return TabularDataset(root, 'lenses.data', r'\s+', [0], [1, 2, 3, 4], -1, None, None, fold, rep)
 def NEW_THYROID(root, transform, fold, rep):
     return TabularDataset(root, 'new-thyroid.data', ',', None, None, 0, None, None, fold, rep)
 
