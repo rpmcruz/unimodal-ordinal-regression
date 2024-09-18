@@ -294,28 +294,27 @@ class ORD_ACL(OrdinalLoss):
     def to_proba(self, logits):
         zeros = torch.zeros(len(logits), 1, device=logits.device)
         # ORD
-        ǵ = logits[:, [0]] + torch.cat((zeros, torch.cumsum(logits[:, 1:]**2, 1)), 1)
+        ǵ = logits[:, [0]] + torch.cat((zeros, torch.cumsum(torch.exp(logits[:, 1:]), 1)), 1)
         # ACL
-        num = torch.exp(-torch.cat((zeros, torch.cumsum(logits, 1)), 1))
-        den = torch.sum(num, 1, keepdims=True)
-        return num/den
+        u = torch.cat((zeros, torch.cumsum(ǵ, 1)), 1)
+        return torch.softmax(-u, 1)
 
     def forward(self, ypred, ytrue):
         ypred = self.to_proba(ypred)
-        return -torch.log(1e-6+ypred[range(len(ytrue)), ytrue])  # NLL
+        return F.nll_loss(1e-6+torch.log(ypred), ytrue)
 
 class VS_SL(OrdinalLoss):
     def to_proba(self, logits):
         zeros = torch.zeros(len(logits), 1, device=logits.device)
         # ORD
-        ǵ = logits[:, [0]] + torch.cat((zeros, torch.cumsum(logits[:, 1:]**2, 1)), 1)
+        ǵ = logits[:, [0]] + torch.cat((zeros, torch.cumsum(torch.exp(logits[:, 1:]), 1)), 1)
         # VS
-        ǧ = torch.abs(ǵ)
+        ǧ = ǵ**2  # or torch.abs(ǵ)
         return torch.softmax(-ǧ, 1)
 
     def forward(self, ypred, ytrue):
         ypred = self.to_proba(ypred)
-        return -torch.log(1e-6+ypred[range(len(ytrue)), ytrue])  # NLL
+        return F.nll_loss(1e-6+torch.log(ypred), ytrue)
 
 ################################################################################
 # Liu, Xiaofeng, et al. "Unimodal regularized neuron stick-breaking for        #
