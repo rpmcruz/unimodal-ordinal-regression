@@ -73,8 +73,8 @@ def negative_log_likelihood(ppred, ypred, ytrue):
 
 def spearman(ppred, ypred, ytrue):
     import scipy.stats
-    return scipy.stats.spearmanr(ypred, ytrue).statistic
+    return scipy.stats.spearmanr(ypred.cpu(), ytrue.cpu()).statistic
 
 def kendall_tau(ppred, ypred, ytrue):
     import scipy.stats
-    return scipy.stats.kendalltau(ypred, ytrue).statistic
+    return scipy.stats.kendalltau(ypred.cpu(), ytrue.cpu()).statistic

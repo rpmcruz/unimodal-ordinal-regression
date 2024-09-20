@@ -304,13 +304,13 @@ class ORD_ACL(OrdinalLoss):
         return F.nll_loss(ypred, ytrue)
 
 class VS_SL(OrdinalLoss):
-    def to_proba(self, logits, logsproba=False):
+    def to_proba(self, logits, logprobs=False):
         zeros = torch.zeros(len(logits), 1, device=logits.device)
         # ORD
         ǵ = logits[:, [0]] + torch.cat((zeros, torch.cumsum(torch.exp(logits[:, 1:]), 1)), 1)
         # VS
         ǧ = ǵ**2  # or torch.abs(ǵ)
-        return return F.log_softmax(-ǧ, 1) if logprobs else torch.softmax(-ǧ, 1)
+        return F.log_softmax(-ǧ, 1) if logprobs else torch.softmax(-ǧ, 1)
 
     def forward(self, ypred, ytrue):
         ypred = self.to_proba(ypred, True)
