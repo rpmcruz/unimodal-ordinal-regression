@@ -22,7 +22,7 @@ for DATASET in $DATASETS; do
     for LOSS in $LOSSES_LAMBDA; do echo -n " & $LOSS"; done
     echo " \\\\"
 
-    for METRIC in 6; do #$(seq 0 6); do
+    for METRIC in $(seq 0 6); do
         if [ $METRIC -eq 0 ]; then echo -n "\%Accuracy"; fi
         if [ $METRIC -eq 1 ]; then echo -n "QWK"; fi
         if [ $METRIC -eq 2 ]; then echo -n "MAE"; fi
