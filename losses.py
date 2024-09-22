@@ -518,7 +518,7 @@ class CDW_CE(OrdinalLoss):
 
     def forward(self, ypred, ytrue):
         ypred = F.softmax(ypred, 1)
-        return -torch.sum(torch.log(1-ypred) * self.d(ytrue), 1)
+        return -torch.sum(torch.log(1-ypred+1e-6) * self.d(ytrue), 1)
 
     def to_proba(self, ypred):
         return F.softmax(ypred, 1)

@@ -79,14 +79,14 @@ def compute_metrics(rep, metrics_list):
 
 metrics_list = [
     metrics.Percentage(metrics.acc),
-    metrics.Percentage(metrics.quadratic_weighted_kappa),
     metrics.mae,
+    metrics.Percentage(metrics.quadratic_weighted_kappa),
+    metrics.Percentage(metrics.kendall_tau),
     metrics.Percentage(metrics.times_unimodal_wasserstein),
     metrics.zero_mean_error,
     metrics.negative_log_likelihood,
-    metrics.Percentage(metrics.kendall_tau),
 ]
-precisions = [1, 1, 2, 1, 2, 2, 1]
+precisions = [1, 2, 1, 1, 1, 2, 2]
 
 if args.only_metric is not None:
     metrics_list = [metrics_list[args.only_metric]]
@@ -100,4 +100,5 @@ if args.print_lambda:
 if len(args.reps) == 1:
     print(' & ' + ' & '.join([f'{result:.{precision}f}' for precision, result in zip(precisions, results[0])]), end='') # + r' \\')
 else:
-    print(' & ' + ' & '.join([f'${mean:.{precision}f}\\color{{gray}}\\pm{std:.{precision}f}$' for precision, mean, std in zip(precisions, results.mean(0), results.std(0))]), end='') # + r' \\')
+    stds = [torch.std(r[~r.isnan()]) for r in results.T]
+    print(' & ' + ' & '.join([f'${mean:.{precision}f}\\color{{gray}}\\pm{std:.{precision}f}$' for precision, mean, std in zip(precisions, results.nanmean(0), stds)]), end='') # + r' \\')

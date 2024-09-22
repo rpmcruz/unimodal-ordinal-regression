@@ -69,7 +69,9 @@ def zero_mean_error(ppred, ypred, ytrue):
 
 def negative_log_likelihood(ppred, ypred, ytrue):
     # ce = -(y=1)*log(p̂) <=> -log(p̂[y])
-    return torch.mean(-torch.log(1e-6+ppred[range(len(ytrue)), ytrue]))
+    ppred = ppred[range(len(ytrue)), ytrue]
+    ppred = ppred[ppred > 1e-8]  # avoid log(0)
+    return torch.mean(-torch.log(ppred))
 
 def spearman(ppred, ypred, ytrue):
     import scipy.stats

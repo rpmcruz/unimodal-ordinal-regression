@@ -1,13 +1,13 @@
 import argparse
 parser = argparse.ArgumentParser()
-parser.add_argument('dataset', choices=['ICIAR', 'HCI', 'FGNET', 'SMEAR2005', 'FOCUSPATH'])
-parser.add_argument('strategy', choices=['allcorrect', 'first', 'quantiles'])
-parser.add_argument('n', type=int)
+parser.add_argument('models', nargs='+')
+parser.add_argument('--n', type=int, default=4)
+parser.add_argument('--dataset', choices=['ICIAR', 'HCI', 'FGNET', 'SMEAR2005', 'FOCUSPATH'], default='FGNET')
+parser.add_argument('--strategy', choices=['allcorrect', 'first', 'quantiles'], default='quantiles')
 parser.add_argument('--classes', nargs='+', type=int)
 parser.add_argument('--interval', default=21, type=int)
 parser.add_argument('--split', default='test')
 parser.add_argument('--fold', default=0, type=int)
-parser.add_argument('--models', nargs='+')
 args = parser.parse_args()
 
 import torch
@@ -15,7 +15,7 @@ from torchvision import transforms
 import matplotlib.pyplot as plt
 from tqdm import tqdm
 import data, losses
-import sys
+import os, sys
 import math, numpy
 
 device = 'cuda' if torch.cuda.is_available() else 'cpu'
@@ -28,12 +28,13 @@ losses_map = {
     'POM': 'POM',
     'CDW_CE': 'CDW',
     'OrdinalEncoding': 'OE',
+    'CrossEntropy_UR': 'UR',
     'BinomialUnimodal_CE': 'BU',
     'PoissonUnimodal': 'PU',
-    'CO2': 'CO2',
-    'HO2': 'HO2',
+    'ORD_ACL': 'ORD-ACL',
+    'VS_SL': 'VS-SL',
     'UnimodalNet': 'UN*',
-    'CrossEntropy_UR': 'UR',
+    'CO2': 'CO2',
     'WassersteinUnimodal_Wass': 'WU-Wass*',
     'WassersteinUnimodal_KLDIV': 'WU-KLDiv*',
 }
@@ -105,20 +106,21 @@ else:  # allcorrect
 
 ############################## EVAL ##############################
 
+# FIXME: change so that image is also part of the tabular
+# we have an extra loss, we need to make room for it.
+
 print(r'\documentclass[preprint,12pt,review]{elsarticle}')
 print(r'\usepackage[table]{xcolor}')
 print(r'\usepackage{pgfplots}')
 print(r'\pgfplotsset{compat=1.18}')
 print(r'\begin{document}')
-print(r'\begin{figure*}')
+print(r'\begin{figure*}[p]')
 print(r'\setlength{\tabcolsep}{0pt}')
 print(r'\makebox[\textwidth]{%')
 print(r'\begin{tabular}{ccccccc}')
-first = True
-for image, label, fname in data:
-    if not first:
-        print(r'\\[-2ex]')
-    first = False
+for j, (image, label, fname) in enumerate(data):
+    if j > 0:
+        print(r'\hline')
     first_class = label - args.interval//2
     second_class = label + args.interval//2
     if first_class < 0:
@@ -128,54 +130,59 @@ for image, label, fname in data:
         first_class += second_class-K-1
         second_class = K-1
     image = image[None].to(device)
-    for model_i, model in enumerate(args.models):
-        loss = model.split('-')[2]
-        model = torch.load(model, map_location=device)
-        loss_fn = model.loss_fn if hasattr(model, 'loss_fn') else getattr(losses, loss)(K)
-        model.eval()
-        if model_i % 6 == 0:
-            if model_i == 0:
-                print(f'{{\small$y={label}$}}')
-            for _model in args.models[model_i:model_i+6]:
-                _loss = _model.split('-')[2]
-                clr = r'\cellcolor{black!10}' if _loss in our_methods else ''
-                print(r' & {\small' + clr + ' ' + losses_map[_loss] + r'}')
-            print(r'\\')
-            if model_i == 0:
-                print(f'\\raisebox{{9ex}}{{\\multirow{{2}}{{*}}{{{{\includegraphics[width=4em]{{{fname}}}}}}}}}')
-        print('&')
-        if loss in our_methods:
-            print(r'\cellcolor{black!10}')
-        with torch.no_grad():
-            preds = model(image)
-            probs = loss_fn.to_proba(preds)
-        print(r'\begin{tikzpicture}[font=\scriptsize]')
-        xmax = min(1, torch.ceil(probs[0, first_class:second_class+1].max() / 0.2).item() * 0.2)
-        xrange = [f'{x.item():.1f}' for x in torch.arange(0, xmax+0.2, 0.2)]
-        if xmax < 0.4:
-            xrange = ['0', '0.1', '0.2']
-        if xmax == 1:
-            xrange = ['0', '0.5', '1']
-        if probs[0, first_class:second_class+1].max() < 0.1:
-            xmax = probs[0, first_class:second_class+1].max().item()
-            decimal_places = -math.floor(math.log10(xmax))+1
-            xrange = ('0', numpy.format_float_positional(round(xmax + (0.1**decimal_places), decimal_places)))
-            xmax = xrange[-1]
-        print(r'\begin{axis}[xbar, width=9.5em, height=18ex, xmin=0, xmax=' + str(xmax) + ',scaled x ticks=false,axis background/.style={fill=white},ytick={' + ','.join(str(k) for k in range(first_class+1, second_class+1, 6)) + '},xticklabels={' + ','.join(xrange) + '},xtick={' + ','.join(xrange) + '}]')
-        print(r'\addplot [bar shift=0pt, bar width=0.20ex, fill=gray, draw=gray] coordinates {' + ' '.join(f'({numpy.format_float_positional(probs[0, k])}, {k})' for k in range(first_class, second_class+1) if k != label) + r'};')
-        # red for the true label
-        print(r'\addplot [bar shift=0pt, bar width=0.20ex, fill=red, draw=red] coordinates {' + f'({numpy.format_float_positional(probs[0, label])},{label})' + r'};')
-        print(r'\end{axis}')
-        print(r'\end{tikzpicture}')
-        if model_i % 6 == 5:
-            if model_i == 5:
-                print(r'\\[-1ex]')
+    models = ['image'] + args.models
+    list_models = [models[i:i+7] for i in range(0, len(models), 7)]
+    for models in list_models:
+        # header
+        for i, model in enumerate(models):
+            if i > 0:
+                print('&')
+            if model == 'image':
+                print(f'{{\\small$y={label}$}}')
             else:
-                print(r'\\')
-    print(r'\hline')
+                loss = model.split('-')[2]
+                if loss in our_methods:
+                    print(r'\cellcolor{black!10}')
+                print(r'{\small ' + losses_map[loss] + '}')
+        print(r'\\')
+        # body
+        for i, model in enumerate(models):
+            if i > 0:
+                print('&')
+            if model == 'image':
+                print(f'\\includegraphics[width=5em, height=11ex]{{imgs/{args.dataset}/{os.path.basename(fname)}}}')
+            else:
+                loss = model.split('-')[2]
+                if loss in our_methods:
+                    print(r'\cellcolor{black!10}')
+                model = torch.load(model, map_location=device)
+                loss_fn = model.loss_fn if hasattr(model, 'loss_fn') else getattr(losses, loss)(K)
+                model.eval()
+                with torch.no_grad():
+                    preds = model(image)
+                    probs = loss_fn.to_proba(preds)
+                print(r'\begin{tikzpicture}[font=\scriptsize]')
+                xmax = min(1, torch.ceil(probs[0, first_class:second_class+1].max() / 0.2).item() * 0.2)
+                xrange = [f'{x.item():.1f}' for x in torch.arange(0, xmax+0.2, 0.2)]
+                if xmax < 0.4:
+                    xrange = ['0', '0.1', '0.2']
+                if xmax == 1:
+                    xrange = ['0', '0.5', '1']
+                if probs[0, first_class:second_class+1].max() < 0.1:
+                    xmax = probs[0, first_class:second_class+1].max().item()
+                    decimal_places = -math.floor(math.log10(xmax))+1
+                    xrange = ('0', numpy.format_float_positional(round(xmax + (0.1**decimal_places), decimal_places)))
+                    xmax = xrange[-1]
+                print(r'\begin{axis}[xbar, width=9.5em, height=18ex, xmin=0, xmax=' + str(xmax) + ',scaled x ticks=false,axis background/.style={fill=white},ytick={' + ','.join(str(k) for k in range(first_class+1, second_class+1, 6)) + '},xticklabels={' + ','.join(xrange) + '},xtick={' + ','.join(xrange) + '}]')
+                print(r'\addplot [bar shift=0pt, bar width=0.20ex, fill=gray, draw=gray] coordinates {' + ' '.join(f'({numpy.format_float_positional(probs[0, k])}, {k})' for k in range(first_class, second_class+1) if k != label) + r'};')
+                # red for the true label
+                print(r'\addplot [bar shift=0pt, bar width=0.20ex, fill=red, draw=red] coordinates {' + f'({numpy.format_float_positional(probs[0, label])},{label})' + r'};')
+                print(r'\end{axis}')
+                print(r'\end{tikzpicture}')
+        print(r'\\')
 print(r'\end{tabular}')
 print('}')
-print(f'\caption{{Examples of probabilities outputs for the {args.dataset} dataset. The selection of the examples was made by choosing the first image of each quartile the testing set (fold=0).}}')
+print(f'\\caption{{Examples of probabilities outputs for the {args.dataset} dataset. The selection of the examples was made by choosing the first image of each quartile the testing set (fold=0).}}')
 print(r'\label{fig:outputs}')
 print(r'\end{figure*}')
 print(r'\end{document}')
