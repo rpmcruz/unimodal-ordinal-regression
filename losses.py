@@ -528,8 +528,10 @@ class OrdinalLogLoss(CDW_CE):
         super().__init__(K, alpha)
 
 ################################################################################
-# To be published.                                                             #
-# Jaime S. Cardoso, Ricardo Cruz and Tomé Albuquerque, 2022.                   #
+# The following methods are proposed by the current work:                      #
+# Cardoso, Jaime S., Ricardo PM Cruz, and Tomé Albuquerque. "Unimodal          #
+# distributions for ordinal regression." IEEE Transactions on Artificial       #
+# Intelligence (2025). https://ieeexplore.ieee.org/abstract/document/10918699/ #
 ################################################################################
 
 class UnimodalNet(OrdinalLoss):
